@@ -93,7 +93,9 @@ class TriangleArbitrage:
         exchange_class = getattr(ccxt.pro, self.exchange)
         client = exchange_class({
             'apiKey': self.apikey,
-            'secret': self.secret
+            'secret': self.secret,
+            'timeout': 30000,
+            'enableRateLimit': True
         })
 
         try:
@@ -149,13 +151,15 @@ class TriangleArbitrage:
             await client.close()
 
 if __name__ == '__main__':
+
     af = TriangleArbitrage(
         exchange="binance",
-        apikey='',
-        secret='',
-        principal=10000,
+        apikey=os.environ.get("APIKEY"),
+        secret=os.environ.get("SECRET"),
+        principal=100,
         profit_margin=0.04
     )
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(af.main())
