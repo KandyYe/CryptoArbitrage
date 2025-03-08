@@ -24,7 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class TriangleArbitrage:
-    def __init__(self, exchange: str, apikey: str, secret: str, principal: int = 10000, profit_margin: float = 0.01):
+    def __init__(self, exchange: str, apikey: str, secret: str, apimemo: str=None, principal: int = 10000, profit_margin: float = 0.01):
         """
         三角套利
         :param exchange: 交易所名称 小写
@@ -34,6 +34,7 @@ class TriangleArbitrage:
         :param profit_margin: 预期利润 小数
         """
         self.exchange = exchange
+        self.apimemo = apimemo
         self.apikey = apikey
         self.secret = secret
         self.profit_info = []
@@ -90,10 +91,15 @@ class TriangleArbitrage:
             raise
 
     async def main(self) -> Dict[str, Any] | None:
+        self.logger.info(f"Target profit: {self.profit:.2f}")
+
         exchange_class = getattr(ccxt.pro, self.exchange)
         client = exchange_class({
             'apiKey': self.apikey,
-            'secret': self.secret
+            'secret': self.secret,
+            'uid': self.apimemo,
+            'timeout': 30000,
+            'enableRateLimit': True
         })
 
         try:
@@ -118,18 +124,24 @@ class TriangleArbitrage:
                                       self.principal / usdt_ticker['last']) - self.principal
                     reverse_profit = (usdt_ticker['last'] * self.principal /
                                       (btc_ticker['last'] * symbol_ticker['last'])) - self.principal
+                    self.logger.info(f"Forward: USDT => {symbol} => BTC => USDT \t Expected {forward_profit:.2f}")
+                    self.logger.info(f"Reverse: USDT => BTC => {symbol} => USDT \t Expected {reverse_profit:.2f}")
 
                     # 执行套利
                     if forward_profit > self.profit:
                         balance = await client.fetch_balance()
                         usdt_balance = balance['USDT']['free']
+                        self.logger.info(f"Execute: USDT => {symbol} => BTC => USDT \t Total {usdt_balance:.2f} USDT")
                         result = await self._execute_forward_arbitrage(client, symbol, usdt_balance)
+                        self.logger.info(f"Completed: USDT => {symbol} => BTC => USDT \t Profit {result['profit']:.2f} USDT")
                         self.profit_info.append(result)
 
                     if reverse_profit > self.profit:
                         balance = await client.fetch_balance()
                         usdt_balance = balance['USDT']['free']
+                        self.logger.info(f"Execute: USDT => BTC => {symbol} => USDT \t Total {usdt_balance:.2f} USDT")
                         result = await self._execute_reverse_arbitrage(client, symbol, usdt_balance)
+                        self.logger.info(f"Completed: USDT => BTC => {symbol} => USDT \t Profit {result['profit']:.2f} USDT")
                         self.profit_info.append(result)
 
                     if i % 5 == 0:
@@ -148,14 +160,38 @@ class TriangleArbitrage:
         finally:
             await client.close()
 
+def load_dotenv():
+    env_filename = None
+    if os.path.exists(os.path.join(os.getcwd(), ".env")):
+        env_filename = os.path.exists(os.path.join(os.getcwd(), ".env"))
+    elif os.path.exists(os.path.dirname(__file__), ".env"):
+        env_filename = os.path.exists(os.path.join(os.getcwd(), ".env"))
+    else:
+        raise FileNotFoundError("Please Ensure the environment file [.env] exists.")
+
+    with open(env_filename, 'r', encoding="utf-8") as fp:
+        while env_line := fp.readline():
+            env_line = env_line.strip()
+            eq_loc = env_line.index('=')
+            env_name = env_line[:eq_loc].strip()
+            env_value = env_line[eq_loc+1:].strip().strip("'\"")
+            os.environ[env_name] = env_value
+    
+
 if __name__ == '__main__':
+
+    if not os.environ.get("SECRET"):
+        load_dotenv()
+
     af = TriangleArbitrage(
-        exchange="binance",
-        apikey='',
-        secret='',
-        principal=10000,
-        profit_margin=0.04
+        exchange=os.environ.get("EXCHANGE"),
+        apimemo=os.environ.get("APIMEMO"),
+        apikey=os.environ.get("APIKEY"),
+        secret=os.environ.get("SECRET"),
+        principal=float(os.environ.get("PRINCIPLE")),
+        profit_margin=float(os.environ.get("PROFIT_MARGIN")),
     )
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(af.main())

@@ -1,6 +1,24 @@
 # CryptoArbitrage
 crypto arbitrary strategies
 
+## Usage
+
+### Docker
+
+1. build docker image
+   ```
+   docker image build -t tri-arbitrage:latest .
+   ```
+2. modify the environment file
+   ```
+   mv ./.env.template .env.template
+   vi .env
+   ```
+3. start the container
+   ```
+   docker run --rm -it --env-file ./.env tri-arbitrage:latest
+   ```
+
 # 🍩 Donate
 
 If you find CryptoArbitrage is useful and would like to support it's development, consider making a donation. Your contributions will help cover the costs of maintaining and improving this project.
